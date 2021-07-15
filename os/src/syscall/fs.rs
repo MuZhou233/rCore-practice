@@ -1,12 +1,18 @@
+use core::ops::Range;
+
 use log::{trace, warn};
 
-use crate::batch::get_app_address;
+use crate::batch::{get_app_address, get_user_stack_address};
 
 const FD_STDOUT: usize = 1;
 
 pub fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
     let app_addr = get_app_address();
-    if !app_addr.contains(&(buf as usize)) || !app_addr.contains(&(buf as usize+len)) {
+    let stack_addr = get_user_stack_address();
+    let write_addr = buf as usize..(buf as usize + len);
+
+    if !range_in_range(&app_addr, &write_addr) &&
+       !range_in_range(&stack_addr, &write_addr) {
         warn!("Try to print illegal address {:?}", buf);
         return -1;
     }
@@ -24,4 +30,8 @@ pub fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
             -1
         }
     }
+}
+
+fn range_in_range(outer: &Range<usize>, inner: &Range<usize>) -> bool {
+    outer.start <= inner.start && inner.end <= outer.end
 }

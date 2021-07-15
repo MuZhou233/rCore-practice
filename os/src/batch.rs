@@ -119,6 +119,11 @@ pub fn get_app_address() -> Range<usize> {
     APP_BASE_ADDRESS..APP_BASE_ADDRESS+APP_SIZE_LIMIT
 }
 
+pub fn get_user_stack_address() -> Range<usize> {
+    let user_stack_start = &USER_STACK as *const _ as usize;
+    user_stack_start..user_stack_start+USER_STACK_SIZE
+}
+
 pub fn run_next_app() -> ! {
     let current_app = APP_MANAGER.inner.borrow().get_current_app();
     unsafe {
