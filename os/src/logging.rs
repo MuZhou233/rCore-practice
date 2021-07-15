@@ -28,7 +28,7 @@ impl Log for SimpleLogger {
         print(format_args!("\u{1B}[{}m{}\u{1B}[0m",
             level_to_color_code(record.level()),
             format_args!(
-                "[{:>5}] {}\n",
+                "[kernel][{:>5}] {}\n",
                 record.level(),
                 record.args()
             ),

@@ -18,18 +18,37 @@ KERNEL_ENTRY_PA := 0x80200000
 # KERNEL OPTIONS
 LOG ?= 
 
+# TEST OPTIONS
+ifdef CHAPTER
+export WATCH_PATH=../tests/user/build/
+export SOURCE_PATH=../tests/user/build/bin/
+export TARGET_PATH=../tests/user/build/bin/
+endif
+
 build:
-	@cargo build --release
+	@cargo build --release --verbose
 	@$(OBJCOPY) $(KERNEL_ELF) --strip-all -O binary $(KERNEL_BIN)
 
 clean:
 	@cargo clean
 
-run: build
+run: gen-user build qemu
+
+test: gen-test build qemu
+
+gen-user:
+	@cd ../user && make build
+
+gen-test: 
+	@git submodule init
+	@git submodule update
+	@cd ../tests/user && make all CHAPTER=$(CHAPTER)
+
+qemu:
 	@qemu-system-riscv64 \
 		-machine virt \
 		-nographic \
 		-bios $(BOOTLOADER) \
 		-device loader,file=$(KERNEL_BIN),addr=$(KERNEL_ENTRY_PA)
 
-.PHONY: build clean qemu
+.PHONY: build clean qemu test
