@@ -6,11 +6,11 @@
 
 mod lang_items;
 mod console;
+mod interrupt;
 mod sbi;
 mod logging;
 
 use log::{debug, error, info, trace, warn};
-use crate::sbi::sbi_call;
 
 global_asm!(include_str!("entry.asm"));
 
@@ -43,14 +43,11 @@ pub fn rust_main() -> ! {
         boot_stack as usize, boot_stack_top as usize
     );
     info!(".bss [{:#x}, {:#x})", sbss as usize, ebss as usize);
-    shutdown()
-}
 
-const SBI_SHUTDOWN: usize = 8;
-
-pub fn shutdown() -> ! {
-    sbi_call(SBI_SHUTDOWN, 0, 0, 0);
-    panic!("It should shutdown!");
+    interrupt::init();
+    unsafe { llvm_asm!("ebreak") };
+    
+    loop{}
 }
 
 fn clear_bss() {

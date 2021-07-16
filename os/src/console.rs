@@ -1,14 +1,9 @@
 use core::fmt::{self, Write};
 
-use crate::sbi::sbi_call;
-
-const SBI_CONSOLE_PUTCHAR: usize = 1;
+use crate::sbi::console_putchar;
 
 struct Stdout;
 
-pub fn console_putchar(c: usize) {
-    sbi_call(SBI_CONSOLE_PUTCHAR, c, 0, 0);
-}
 
 impl Write for Stdout {
     fn write_str(&mut self, s: &str) -> fmt::Result {
