@@ -47,6 +47,10 @@ pub fn rust_main() -> ! {
     interrupt::init();
     unsafe { llvm_asm!("ebreak") };
     
+    unsafe {
+        (0x0 as *mut u8).read_volatile();
+    }
+
     loop{}
 }
 
