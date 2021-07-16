@@ -2,13 +2,14 @@ use core::ops::Range;
 
 use log::{trace, warn};
 
-use crate::batch::{get_app_address, get_user_stack_address};
+use crate::{loader::{get_app_address, get_user_stack_address}, task::get_current_app_id};
 
 const FD_STDOUT: usize = 1;
 
 pub fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
-    let app_addr = get_app_address();
-    let stack_addr = get_user_stack_address();
+    let app_id = get_current_app_id();
+    let app_addr = get_app_address(app_id);
+    let stack_addr = get_user_stack_address(app_id);
     let write_addr = buf as usize..(buf as usize + len);
 
     if !range_in_range(&app_addr, &write_addr) &&

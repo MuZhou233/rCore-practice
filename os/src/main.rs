@@ -9,7 +9,9 @@ mod lang_items;
 mod console;
 mod sbi;
 mod logging;
-mod batch;
+mod loader;
+mod task;
+mod config;
 mod trap;
 mod syscall;
 
@@ -25,9 +27,9 @@ pub fn rust_main() -> ! {
     logging::init();
     start_message();
     trap::init();
-    batch::init();
-    
-    batch::run_next_app()
+    loader::load_apps();
+    task::run_first_task();
+    shutdown()
 }
 
 fn start_message() {
