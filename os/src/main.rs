@@ -14,9 +14,10 @@ mod task;
 mod config;
 mod trap;
 mod syscall;
+mod timer;
 
 use log::{debug, error, info, trace, warn};
-use crate::sbi::sbi_call;
+use sbi::shutdown;
 
 global_asm!(include_str!("entry.asm"));
 global_asm!(include_str!("link_app.S"));
@@ -28,6 +29,8 @@ pub fn rust_main() -> ! {
     start_message();
     trap::init();
     loader::load_apps();
+    trap::enable_timer_interrupt();
+    timer::set_next_trigger();
     task::run_first_task();
     shutdown()
 }
@@ -58,13 +61,6 @@ fn start_message() {
         boot_stack as usize, boot_stack_top as usize
     );
     info!(".bss [{:#x}, {:#x})", sbss as usize, ebss as usize);
-}
-
-const SBI_SHUTDOWN: usize = 8;
-
-pub fn shutdown() -> ! {
-    sbi_call(SBI_SHUTDOWN, 0, 0, 0);
-    panic!("It should shutdown!");
 }
 
 fn clear_bss() {

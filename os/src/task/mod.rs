@@ -71,7 +71,7 @@ impl TaskManager {
     }
 
     fn get_current_id(&self) -> usize {
-        let mut inner = self.inner.borrow_mut();
+        let inner = self.inner.borrow();
         inner.current_task.clone()
     }
 
