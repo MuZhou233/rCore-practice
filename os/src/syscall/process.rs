@@ -1,6 +1,6 @@
-use log::{debug, info};
+use log::info;
 
-use crate::task::{exit_current_and_run_next, suspend_current_and_run_next};
+use crate::task::{exit_current_and_run_next, set_current_priority, suspend_current_and_run_next};
 use crate::timer::get_time_ms;
 
 pub fn sys_exit(exit_code: i32) -> ! {
@@ -29,6 +29,7 @@ pub fn sys_get_time(time: &mut TimeVal, _tz: usize) -> isize {
 
 pub fn sys_set_priority(prio: isize) -> isize {
     if prio > 1 {
+        set_current_priority(prio as usize);
         prio
     } else {
         -1

@@ -2,6 +2,7 @@
 pub struct TaskControlBlock {
     pub task_cx_ptr: usize,
     pub task_status: TaskStatus,
+    pub task_priority: usize,
     pub task_start_time: usize,
     pub task_total_time: usize,
 }

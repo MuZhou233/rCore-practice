@@ -1,6 +1,6 @@
 mod context;
 
-use log::{debug, info, trace, warn};
+use log::{trace, warn};
 use riscv::register::{
     mtvec::TrapMode,
     stvec,

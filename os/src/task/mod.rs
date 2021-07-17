@@ -2,25 +2,27 @@ mod context;
 mod switch;
 mod task;
 
-use crate::config::{MAX_APP_NUM, MAX_APP_TIME};
+use crate::config::{APP_DEFAULT_PRIORITY, BIG_STRIDE, MAX_APP_NUM, MAX_APP_TIME};
 use crate::loader::{get_num_app, init_app_cx};
 use crate::shutdown;
 use crate::timer::get_time_ms;
 use core::cell::RefCell;
+use heapless::BinaryHeap;
+use heapless::binary_heap::Min;
 use lazy_static::*;
-use log::{debug, info, trace, warn};
+use log::{info, trace, warn};
 use switch::__switch;
 use task::{TaskControlBlock, TaskStatus};
 
 pub use context::TaskContext;
 
 pub struct TaskManager {
-    num_app: usize,
     inner: RefCell<TaskManagerInner>,
 }
 
 struct TaskManagerInner {
     tasks: [TaskControlBlock; MAX_APP_NUM],
+    stride: BinaryHeap<(usize, usize), Min, MAX_APP_NUM>,
     current_task: usize,
 }
 
@@ -30,17 +32,26 @@ lazy_static! {
     pub static ref TASK_MANAGER: TaskManager = {
         let num_app = get_num_app();
         let mut tasks = [
-            TaskControlBlock { task_cx_ptr: 0, task_status: TaskStatus::UnInit, task_start_time: 0, task_total_time: 0 };
+            TaskControlBlock { 
+                task_cx_ptr: 0, 
+                task_status: TaskStatus::UnInit, 
+                task_priority: APP_DEFAULT_PRIORITY, 
+                task_start_time: 0, 
+                task_total_time: 0 
+            };
             MAX_APP_NUM
         ];
+        let mut stride = BinaryHeap::new();
         for i in 0..num_app {
             tasks[i].task_cx_ptr = init_app_cx(i) as * const _ as usize;
             tasks[i].task_status = TaskStatus::Ready;
+            stride.push((0, i)).expect("Stride push failed while init");
         }
+
         TaskManager {
-            num_app,
             inner: RefCell::new(TaskManagerInner {
                 tasks,
+                stride,
                 current_task: 0,
             }),
         }
@@ -60,6 +71,12 @@ impl TaskManager {
                 next_task_cx_ptr2,
             );
         }
+    }
+
+    fn set_current_priority(&self, prio: usize) {
+        let mut inner = self.inner.borrow_mut();
+        let current = inner.current_task;
+        inner.tasks[current].task_priority = prio;
     }
 
     fn mark_current_suspended(&self) {
@@ -90,13 +107,18 @@ impl TaskManager {
     }
 
     fn find_next_task(&self) -> Option<usize> {
-        let inner = self.inner.borrow();
-        let current = inner.current_task;
-        (current + 1..current + self.num_app + 1)
-            .map(|id| id % self.num_app)
-            .find(|id| {
-                inner.tasks[*id].task_status == TaskStatus::Ready
-            })
+        let mut inner = self.inner.borrow_mut();
+        while let Some((stride, next)) = inner.stride.pop() {
+            if inner.tasks[next].task_status != TaskStatus::Ready {
+                continue;
+            }
+            let priority = inner.tasks[next].task_priority;
+            inner.stride.push((stride + BIG_STRIDE / priority, next)).expect(
+                "Stride push failed"
+            );
+            return Some(next);
+        }
+        None
     }
 
     fn run_next_task(&self) {
@@ -145,6 +167,10 @@ pub fn exit_current_and_run_next() -> ! {
     mark_current_exited();
     run_next_task();
     shutdown()
+}
+
+pub fn set_current_priority(prio: usize) {
+    TASK_MANAGER.set_current_priority(prio);
 }
 
 pub fn get_current_app_id() -> usize {

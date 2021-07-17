@@ -26,7 +26,7 @@ export TARGET_PATH=../tests/user/build/bin/
 endif
 
 build:
-	@cargo build --release --verbose
+	@cargo build --release
 	@$(OBJCOPY) $(KERNEL_ELF) --strip-all -O binary $(KERNEL_BIN)
 
 clean:
