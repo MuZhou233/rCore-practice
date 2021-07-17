@@ -2,11 +2,13 @@ mod context;
 mod switch;
 mod task;
 
-use crate::config::MAX_APP_NUM;
+use crate::config::{MAX_APP_NUM, MAX_APP_TIME};
 use crate::loader::{get_num_app, init_app_cx};
 use crate::shutdown;
+use crate::timer::get_time_ms;
 use core::cell::RefCell;
 use lazy_static::*;
+use log::{debug, info, trace, warn};
 use switch::__switch;
 use task::{TaskControlBlock, TaskStatus};
 
@@ -28,7 +30,7 @@ lazy_static! {
     pub static ref TASK_MANAGER: TaskManager = {
         let num_app = get_num_app();
         let mut tasks = [
-            TaskControlBlock { task_cx_ptr: 0, task_status: TaskStatus::UnInit };
+            TaskControlBlock { task_cx_ptr: 0, task_status: TaskStatus::UnInit, task_start_time: 0, task_total_time: 0 };
             MAX_APP_NUM
         ];
         for i in 0..num_app {
@@ -47,7 +49,9 @@ lazy_static! {
 
 impl TaskManager {
     fn run_first_task(&self) {
+        info!("Applications start");
         self.inner.borrow_mut().tasks[0].task_status = TaskStatus::Running;
+        self.inner.borrow_mut().tasks[0].task_start_time = get_time_ms();
         let next_task_cx_ptr2 = self.inner.borrow().tasks[0].get_task_cx_ptr2();
         let _unused: usize = 0;
         unsafe {
@@ -62,6 +66,16 @@ impl TaskManager {
         let mut inner = self.inner.borrow_mut();
         let current = inner.current_task;
         inner.tasks[current].task_status = TaskStatus::Ready;
+
+        inner.tasks[current].task_total_time += get_time_ms() - inner.tasks[current].task_start_time;
+        if inner.tasks[current].task_total_time > MAX_APP_TIME {
+            warn!("Application {} be killed because runs too long", current);
+            inner.tasks[current].task_status = TaskStatus::Exited;
+            core::mem::drop(inner);
+            if self.find_next_task().is_none() {
+                shutdown()
+            }
+        }
     }
 
     fn mark_current_exited(&self) {
@@ -89,7 +103,9 @@ impl TaskManager {
         if let Some(next) = self.find_next_task() {
             let mut inner = self.inner.borrow_mut();
             let current = inner.current_task;
+            trace!("switch to app {}", next);
             inner.tasks[next].task_status = TaskStatus::Running;
+            inner.tasks[next].task_start_time = get_time_ms();
             inner.current_task = next;
             let current_task_cx_ptr2 = inner.tasks[current].get_task_cx_ptr2();
             let next_task_cx_ptr2 = inner.tasks[next].get_task_cx_ptr2();

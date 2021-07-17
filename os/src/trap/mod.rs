@@ -1,6 +1,6 @@
 mod context;
 
-use log::{info, trace, warn};
+use log::{debug, info, trace, warn};
 use riscv::register::{
     mtvec::TrapMode,
     stvec,
@@ -53,7 +53,6 @@ pub fn trap_handler(cx: &mut TrapContext) -> &mut TrapContext {
             exit_current_and_run_next()
         }
         Trap::Interrupt(Interrupt::SupervisorTimer) => {
-            info!("Round-Robin");
             set_next_trigger();
             suspend_current_and_run_next();
         }

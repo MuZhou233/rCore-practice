@@ -1,6 +1,6 @@
 use core::ops::Range;
 
-use log::{trace, warn};
+use log::{debug, trace, warn};
 
 use crate::{loader::{get_app_address, get_user_stack_address}, task::get_current_app_id};
 

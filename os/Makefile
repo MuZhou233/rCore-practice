@@ -42,7 +42,7 @@ gen-user:
 gen-test: 
 	@git submodule init
 	@git submodule update
-	@cd ../tests/user && make all CHAPTER=$(CHAPTER)
+	@cd ../tests/user && make clean && make all CHAPTER=$(CHAPTER)
 
 qemu:
 	@qemu-system-riscv64 \
