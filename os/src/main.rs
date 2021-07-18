@@ -3,6 +3,11 @@
 #![feature(llvm_asm)]
 #![feature(global_asm)]
 #![feature(panic_info_message)]
+#![feature(alloc_error_handler)]
+
+extern crate alloc;
+#[macro_use]
+extern crate bitflags;
 
 mod lang_items;
 #[macro_use]
@@ -15,6 +20,7 @@ mod config;
 mod trap;
 mod syscall;
 mod timer;
+mod mm;
 
 use log::{debug, error, info, trace, warn};
 use sbi::shutdown;
@@ -27,8 +33,10 @@ pub fn rust_main() -> ! {
     clear_bss();
     logging::init();
     start_message();
+    mm::init();
+    info!("Back to world!");
+    mm::remap_test();
     trap::init();
-    loader::load_apps();
     trap::enable_timer_interrupt();
     timer::set_next_trigger();
     task::run_first_task();

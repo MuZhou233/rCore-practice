@@ -21,10 +21,11 @@ pub struct TimeVal {
 }
 
 pub fn sys_get_time(time: &mut TimeVal, _tz: usize) -> isize {
-    let time_ms = get_time_ms();
-    time.sec = time_ms / 1000;
-    time.usec = (time_ms % 1000) * 1000;
-    0
+    // let time_ms = get_time_ms();
+    // time.sec = time_ms / 1000;
+    // time.usec = (time_ms % 1000) * 1000;
+    // 0
+    get_time_ms() as isize
 }
 
 pub fn sys_set_priority(prio: isize) -> isize {

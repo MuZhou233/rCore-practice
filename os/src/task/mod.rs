@@ -2,13 +2,15 @@ mod context;
 mod switch;
 mod task;
 
-use crate::config::{APP_DEFAULT_PRIORITY, BIG_STRIDE, MAX_APP_NUM, MAX_APP_TIME};
-use crate::loader::{get_num_app, init_app_cx};
-use crate::shutdown;
+use crate::config::{BIG_STRIDE, MAX_APP_TIME};
+use crate::loader::{get_num_app, get_app_data};
+use crate::sbi::shutdown;
 use crate::timer::get_time_ms;
+use crate::trap::TrapContext;
 use core::cell::RefCell;
-use heapless::BinaryHeap;
-use heapless::binary_heap::Min;
+use core::cmp::Reverse;
+use alloc::collections::BinaryHeap;
+use alloc::vec::Vec;
 use lazy_static::*;
 use log::{info, trace, warn};
 use switch::__switch;
@@ -21,8 +23,8 @@ pub struct TaskManager {
 }
 
 struct TaskManagerInner {
-    tasks: [TaskControlBlock; MAX_APP_NUM],
-    stride: BinaryHeap<(usize, usize), Min, MAX_APP_NUM>,
+    tasks: Vec<TaskControlBlock>,
+    stride: BinaryHeap<Reverse<(usize, usize)>>,
     current_task: usize,
 }
 
@@ -30,22 +32,17 @@ unsafe impl Sync for TaskManager {}
 
 lazy_static! {
     pub static ref TASK_MANAGER: TaskManager = {
+        info!("init TASK_MANAGER");
         let num_app = get_num_app();
-        let mut tasks = [
-            TaskControlBlock { 
-                task_cx_ptr: 0, 
-                task_status: TaskStatus::UnInit, 
-                task_priority: APP_DEFAULT_PRIORITY, 
-                task_start_time: 0, 
-                task_total_time: 0 
-            };
-            MAX_APP_NUM
-        ];
+        info!("num_app = {}", num_app);
+        let mut tasks: Vec<TaskControlBlock> = Vec::new();
         let mut stride = BinaryHeap::new();
         for i in 0..num_app {
-            tasks[i].task_cx_ptr = init_app_cx(i) as * const _ as usize;
-            tasks[i].task_status = TaskStatus::Ready;
-            stride.push((0, i)).expect("Stride push failed while init");
+            tasks.push(TaskControlBlock::new(
+                get_app_data(i),
+                i,
+            ));
+            stride.push(Reverse((0, i)));
         }
 
         TaskManager {
@@ -101,24 +98,29 @@ impl TaskManager {
         inner.tasks[current].task_status = TaskStatus::Exited;
     }
 
-    fn get_current_id(&self) -> usize {
-        let inner = self.inner.borrow();
-        inner.current_task.clone()
-    }
-
     fn find_next_task(&self) -> Option<usize> {
         let mut inner = self.inner.borrow_mut();
-        while let Some((stride, next)) = inner.stride.pop() {
+        while let Some(Reverse((stride, next))) = inner.stride.pop() {
             if inner.tasks[next].task_status != TaskStatus::Ready {
                 continue;
             }
             let priority = inner.tasks[next].task_priority;
-            inner.stride.push((stride + BIG_STRIDE / priority, next)).expect(
-                "Stride push failed"
-            );
+            inner.stride.push(Reverse((stride + BIG_STRIDE / priority, next)));
             return Some(next);
         }
         None
+    }
+
+    fn get_current_token(&self) -> usize {
+        let inner = self.inner.borrow();
+        let current = inner.current_task;
+        inner.tasks[current].get_user_token()
+    }
+
+    fn get_current_trap_cx(&self) -> &mut TrapContext {
+        let inner = self.inner.borrow();
+        let current = inner.current_task;
+        inner.tasks[current].get_trap_cx()
     }
 
     fn run_next_task(&self) {
@@ -173,6 +175,10 @@ pub fn set_current_priority(prio: usize) {
     TASK_MANAGER.set_current_priority(prio);
 }
 
-pub fn get_current_app_id() -> usize {
-    TASK_MANAGER.get_current_id()
+pub fn current_user_token() -> usize {
+    TASK_MANAGER.get_current_token()
+}
+
+pub fn current_trap_cx() -> &'static mut TrapContext {
+    TASK_MANAGER.get_current_trap_cx()
 }
