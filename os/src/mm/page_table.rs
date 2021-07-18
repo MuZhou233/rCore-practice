@@ -155,3 +155,31 @@ pub fn translated_byte_buffer(token: usize, ptr: *const u8, len: usize) -> Vec<&
     }
     v
 }
+
+pub fn write_translated_byte_buffer(token: usize, ptr: *const u8, len: usize, data: &[u8]) {
+    let page_table = PageTable::from_token(token);
+    let mut start = ptr as usize;
+    let end = start + len;
+    let mut v = data;
+    while start < end {
+        let start_va = VirtAddr::from(start);
+        let mut vpn = start_va.floor();
+        let ppn = page_table
+            .translate(vpn)
+            .unwrap()
+            .ppn();
+        vpn.step();
+        let mut end_va: VirtAddr = vpn.into();
+        end_va = end_va.min(VirtAddr::from(end));
+        if end_va.page_offset() == 0 {
+            let len = ppn.get_bytes_array().len() - start_va.page_offset();
+            ppn.get_bytes_array()[start_va.page_offset()..].copy_from_slice(&v[..len]);
+            v = &v[len..];
+        } else {
+            let len = end_va.page_offset() - start_va.page_offset();
+            ppn.get_bytes_array()[start_va.page_offset()..end_va.page_offset()].copy_from_slice(&v[..len]);
+            v = &v[len..];
+        }
+        start = end_va.into();
+    }
+}

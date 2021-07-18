@@ -21,8 +21,9 @@ LOG ?=
 # TEST OPTIONS
 ifdef CHAPTER
 export WATCH_PATH=../tests/user/build/
-export SOURCE_PATH=../tests/user/build/bin/
-export TARGET_PATH=../tests/user/build/bin/
+export SOURCE_PATH=../tests/user/build/elf/
+export TARGET_PATH=../tests/user/build/elf/
+export FILE_EXT=.elf
 endif
 
 build:

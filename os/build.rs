@@ -11,6 +11,7 @@ fn main() {
 const WATCH_PATH: &str = option_env_with_default!("WATCH_PATH", "../user/src/");
 const SOURCE_PATH: &str = option_env_with_default!("SOURCE_PATH", "../user/src/bin");
 const TARGET_PATH: &str = option_env_with_default!("TARGET_PATH", "../user/target/riscv64gc-unknown-none-elf/release/");
+const FILE_EXT: &str = option_env_with_default!("FILE_EXT", "");
 
 #[macro_export]
 macro_rules! option_env_with_default {
@@ -57,8 +58,8 @@ _num_app:
     .global app_{0}_end
     .align 3
 app_{0}_start:
-    .incbin "{2}{1}"
-app_{0}_end:"#, idx, app, TARGET_PATH)?;
+    .incbin "{2}{1}{3}"
+app_{0}_end:"#, idx, app, TARGET_PATH, FILE_EXT)?;
     }
     Ok(())
 }
