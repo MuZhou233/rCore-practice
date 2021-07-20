@@ -9,21 +9,20 @@ extern crate alloc;
 #[macro_use]
 extern crate bitflags;
 
-mod lang_items;
 #[macro_use]
 mod console;
-mod sbi;
+mod lang_items;
 mod logging;
-mod loader;
-mod task;
-mod config;
-mod trap;
+mod sbi;
 mod syscall;
+mod trap;
+mod loader;
+mod config;
+mod task;
 mod timer;
 mod mm;
 
 use log::info;
-use sbi::shutdown;
 
 global_asm!(include_str!("entry.asm"));
 global_asm!(include_str!("link_app.S"));
@@ -32,19 +31,17 @@ global_asm!(include_str!("link_app.S"));
 pub fn rust_main() -> ! {
     clear_bss();
     logging::init();
-    start_message();
+    info!("Hello, world!");
     mm::init();
-    info!("Back to world!");
     mm::remap_test();
+    task::add_initproc();
+    info!("after initproc!");
     trap::init();
     trap::enable_timer_interrupt();
     timer::set_next_trigger();
-    task::run_first_task();
-    shutdown()
-}
-
-fn start_message() {
-    info!("Hello, world!");
+    loader::list_apps();
+    task::run_tasks();
+    panic!("Unreachable in rust_main!");
 }
 
 fn clear_bss() {
