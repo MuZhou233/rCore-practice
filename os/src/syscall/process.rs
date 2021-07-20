@@ -1,6 +1,7 @@
 use log::info;
 
-use crate::task::{exit_current_and_run_next, set_current_priority, suspend_current_and_run_next};
+use crate::config::PAGE_SIZE;
+use crate::task::{add_current_map_area, exit_current_and_run_next, remove_current_map_area, set_current_priority, suspend_current_and_run_next};
 use crate::timer::get_time_ms;
 
 pub fn sys_exit(exit_code: i32) -> ! {
@@ -35,11 +36,21 @@ pub fn sys_set_priority(prio: isize) -> isize {
         -1
     }
 }
-
 pub fn sys_mmap(start: usize, len: usize, port: usize) -> i32 {
-    -1
+    if start % PAGE_SIZE > 0 {
+        -1
+    } else {
+        add_current_map_area(start..start+len, port, true)
+            .map(|l| l as i32).unwrap_or(-1)
+    }
 }
 
 pub fn sys_munmap(start: usize, len: usize) -> i32 {
-    -1
+    if start % PAGE_SIZE > 0 {
+        -1
+    } else if remove_current_map_area(start..start+len) {
+        ((len - 1 + PAGE_SIZE) / PAGE_SIZE * PAGE_SIZE) as i32
+    } else {
+        -1
+    }
 }

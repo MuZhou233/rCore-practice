@@ -1,3 +1,7 @@
+use core::ops::Range;
+
+use log::trace;
+
 use crate::mm::{MemorySet, MapPermission, PhysPageNum, KERNEL_SPACE, VirtAddr};
 use crate::trap::{TrapContext, trap_handler};
 use crate::config::{APP_DEFAULT_PRIORITY, TRAP_CONTEXT, kernel_stack_position};
@@ -24,6 +28,28 @@ impl TaskControlBlock {
     pub fn get_user_token(&self) -> usize {
         self.memory_set.token()
     }
+    pub fn add_map_area(&mut self, vddr: Range<usize>, port: usize, exact: bool) -> Option<usize> {
+        if (port & !0x7 != 0) || (port & 0x7 == 0) {
+            return None;
+        }
+        let mut permission = MapPermission::U;
+        if port & 0x1 == 0x1 {permission |= MapPermission::R}
+        if port & 0x2 == 0x2 {permission |= MapPermission::W}
+        if port & 0x4 == 0x4 {permission |= MapPermission::X}
+        trace!("add_map_area: permission {:?}", permission);
+        self.memory_set.insert_framed_area(
+            vddr.start.into(), 
+            vddr.end.into(), 
+            permission, 
+            exact
+        )
+    }
+    pub fn remove_map_area(&mut self, vddr: Range<usize>) -> bool {
+        self.memory_set.remove_framed_area(
+            vddr.start.into(), 
+            vddr.end.into()
+        )
+    }
     pub fn new(elf_data: &[u8], app_id: usize) -> Self {
         // memory_set with elf program headers/trampoline/trap context/user stack
         let (memory_set, user_sp, entry_point) = MemorySet::from_elf(elf_data);
@@ -40,6 +66,7 @@ impl TaskControlBlock {
                 kernel_stack_bottom.into(),
                 kernel_stack_top.into(),
                 MapPermission::R | MapPermission::W,
+                false
             );
         let task_cx_ptr = (kernel_stack_top - core::mem::size_of::<TaskContext>()) as *mut TaskContext;
         unsafe { *task_cx_ptr = TaskContext::goto_trap_return(); }

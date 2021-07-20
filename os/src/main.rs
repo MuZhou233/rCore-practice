@@ -22,7 +22,7 @@ mod syscall;
 mod timer;
 mod mm;
 
-use log::{debug, error, info, trace, warn};
+use log::info;
 use sbi::shutdown;
 
 global_asm!(include_str!("entry.asm"));
@@ -44,31 +44,7 @@ pub fn rust_main() -> ! {
 }
 
 fn start_message() {
-    extern "C" {
-        fn stext();
-        fn etext();
-        fn srodata();
-        fn erodata();
-        fn sdata();
-        fn edata();
-        fn sbss();
-        fn ebss();
-        fn boot_stack();
-        fn boot_stack_top();
-    }
     info!("Hello, world!");
-    warn!("test warning text");
-    error!("test error text");
-    debug!("test debug text");
-    trace!("test trace text");
-    info!(".text [{:#x}, {:#x})", stext as usize, etext as usize);
-    info!(".rodata [{:#x}, {:#x})", srodata as usize, erodata as usize);
-    info!(".data [{:#x}, {:#x})", sdata as usize, edata as usize);
-    info!(
-        "boot_stack [{:#x}, {:#x})",
-        boot_stack as usize, boot_stack_top as usize
-    );
-    info!(".bss [{:#x}, {:#x})", sbss as usize, ebss as usize);
 }
 
 fn clear_bss() {

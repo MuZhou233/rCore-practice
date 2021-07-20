@@ -9,6 +9,7 @@ use crate::timer::get_time_ms;
 use crate::trap::TrapContext;
 use core::cell::RefCell;
 use core::cmp::Reverse;
+use core::ops::Range;
 use alloc::collections::BinaryHeap;
 use alloc::vec::Vec;
 use lazy_static::*;
@@ -123,6 +124,18 @@ impl TaskManager {
         inner.tasks[current].get_trap_cx()
     }
 
+    fn add_current_map_area(&self, addr: Range<usize>, port: usize, exact: bool) -> Option<usize> {
+        let mut inner = self.inner.borrow_mut();
+        let current = inner.current_task;
+        inner.tasks[current].add_map_area(addr, port, exact)
+    }
+
+    fn remove_current_map_area(&self, addr: Range<usize>) -> bool {
+        let mut inner = self.inner.borrow_mut();
+        let current = inner.current_task;
+        inner.tasks[current].remove_map_area(addr)
+    }
+
     fn run_next_task(&self) {
         if let Some(next) = self.find_next_task() {
             let mut inner = self.inner.borrow_mut();
@@ -181,4 +194,12 @@ pub fn current_user_token() -> usize {
 
 pub fn current_trap_cx() -> &'static mut TrapContext {
     TASK_MANAGER.get_current_trap_cx()
+}
+
+pub fn add_current_map_area(addr: Range<usize>, port: usize, exact: bool) -> Option<usize> {
+    TASK_MANAGER.add_current_map_area(addr, port, exact)
+}
+
+pub fn remove_current_map_area(addr: Range<usize>) -> bool {
+    TASK_MANAGER.remove_current_map_area(addr)
 }

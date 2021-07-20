@@ -4,7 +4,7 @@ use super::{FrameTracker, frame_alloc};
 use super::{VPNRange, StepByOne};
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
-use log::info;
+use log::{info, trace};
 use riscv::register::satp;
 use alloc::sync::Arc;
 use lazy_static::*;
@@ -52,13 +52,25 @@ impl MemorySet {
         self.page_table.token()
     }
     /// Assume that no conflicts.
-    pub fn insert_framed_area(&mut self, start_va: VirtAddr, end_va: VirtAddr, permission: MapPermission) {
-        self.push(MapArea::new(
+    pub fn insert_framed_area(&mut self, start_va: VirtAddr, end_va: VirtAddr, permission: MapPermission, exact_va: bool) -> Option<usize> {
+        let map_type = if exact_va { MapType::Identical } else { MapType::Framed };
+        let map_area = MapArea::new(
             start_va,
             end_va,
-            MapType::Framed,
+            map_type,
             permission,
-        ), None);
+        );
+        for area in &self.areas {
+            if area.cross(&map_area) {
+                return None
+            }
+        }
+        self.push(map_area, None);
+        let vpns = self.areas[self.areas.len() - 1].vpn_range;
+        Some((vpns.get_end().0 - vpns.get_start().0) * PAGE_SIZE)
+    }
+    pub fn remove_framed_area(&mut self, start_va: VirtAddr, end_va: VirtAddr) -> bool {
+        self.remove(VPNRange::new(start_va.floor(), end_va.ceil()))
     }
     fn push(&mut self, mut map_area: MapArea, data: Option<&[u8]>) {
         map_area.map(&mut self.page_table);
@@ -66,6 +78,13 @@ impl MemorySet {
             map_area.copy_data(&mut self.page_table, data);
         }
         self.areas.push(map_area);
+    }
+    fn remove(&mut self, vpns: VPNRange) -> bool {
+        self.areas.iter().position(|area| area.vpn_range == vpns).map(|index| {
+            self.areas[index].unmap(&mut self.page_table);
+            self.areas.remove(index);
+            true
+        }).unwrap_or(false)
     }
     /// Mention that trampoline is not collected by areas.
     fn map_trampoline(&mut self) {
@@ -214,6 +233,13 @@ impl MapArea {
             map_perm,
         }
     }
+    pub fn cross(&self, area: &Self) -> bool {
+        self.contains(area.vpn_range.get_start()) || area.contains(self.vpn_range.get_start())
+    }
+    pub fn contains(&self, vpn: impl Into<VirtPageNum>) -> bool {
+        let vpn = vpn.into();
+        self.vpn_range.get_start() <= vpn && vpn < self.vpn_range.get_end()
+    }
     pub fn map_one(&mut self, page_table: &mut PageTable, vpn: VirtPageNum) {
         let ppn: PhysPageNum;
         match self.map_type {
@@ -229,7 +255,6 @@ impl MapArea {
         let pte_flags = PTEFlags::from_bits(self.map_perm.bits).unwrap();
         page_table.map(vpn, ppn, pte_flags);
     }
-    #[allow(unused)]
     pub fn unmap_one(&mut self, page_table: &mut PageTable, vpn: VirtPageNum) {
         match self.map_type {
             MapType::Framed => {
@@ -240,11 +265,11 @@ impl MapArea {
         page_table.unmap(vpn);
     }
     pub fn map(&mut self, page_table: &mut PageTable) {
+        trace!("MapArea map: from {:?} to {:?} mod {:?}", self.vpn_range.get_start(), self.vpn_range.get_end(), self.map_type);
         for vpn in self.vpn_range {
             self.map_one(page_table, vpn);
         }
     }
-    #[allow(unused)]
     pub fn unmap(&mut self, page_table: &mut PageTable) {
         for vpn in self.vpn_range {
             self.unmap_one(page_table, vpn);
