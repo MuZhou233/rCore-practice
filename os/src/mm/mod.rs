@@ -10,6 +10,7 @@ pub use address::{PhysAddr, VirtAddr, PhysPageNum, VirtPageNum};
 pub use frame_allocator::{FrameTracker, frame_alloc};
 pub use page_table::{
     PageTableEntry,
+    UserBuffer,
     translated_byte_buffer,
     write_translated_byte_buffer,
     translated_str,
