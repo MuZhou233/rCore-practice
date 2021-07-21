@@ -1,23 +1,30 @@
+use crate::config::BIG_STRIDE;
+
 use super::TaskControlBlock;
-use alloc::collections::VecDeque;
+use alloc::collections::BinaryHeap;
 use alloc::sync::Arc;
+use core::cmp::Reverse;
 use spin::Mutex;
 use lazy_static::*;
 
 pub struct TaskManager {
-    ready_queue: VecDeque<Arc<TaskControlBlock>>,
+    ready_queue: BinaryHeap<Reverse<Arc<TaskControlBlock>>>,
 }
 
 /// A simple FIFO scheduler.
 impl TaskManager {
     pub fn new() -> Self {
-        Self { ready_queue: VecDeque::new(), }
+        Self { ready_queue: BinaryHeap::new(), }
     }
     pub fn add(&mut self, task: Arc<TaskControlBlock>) {
-        self.ready_queue.push_back(task);
+        self.ready_queue.push(Reverse(task));
     }
     pub fn fetch(&mut self) -> Option<Arc<TaskControlBlock>> {
-        self.ready_queue.pop_front()
+        self.ready_queue.pop().map(|task| {
+            let task = task.0;
+            task.set_task_stride(task.get_task_stride() + BIG_STRIDE / task.get_task_priority());
+            task
+        })
     }
 }
 

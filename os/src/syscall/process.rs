@@ -31,24 +31,23 @@ pub struct TimeVal {
 }
 
 pub fn sys_get_time(time_addr: usize, _tz: usize) -> isize {
-    // let mut time = TimeVal{ sec: 0, usec: 0 };
-    // let time_ms = get_time_ms();
-    // time.sec = time_ms / 1000;
-    // time.usec = (time_ms % 1000) * 1000;
-    // write_translated_byte_buffer(current_user_token(), time_addr as *const u8, core::mem::size_of::<TimeVal>(), 
-    // unsafe{ core::slice::from_raw_parts(&time as *const _ as *const u8, core::mem::size_of::<TimeVal>()) });
-    // 0
-    get_time_ms() as isize
+    let mut time = TimeVal{ sec: 0, usec: 0 };
+    let time_ms = get_time_ms();
+    time.sec = time_ms / 1000;
+    time.usec = (time_ms % 1000) * 1000;
+    write_translated_byte_buffer(current_user_token(), time_addr as *const u8, core::mem::size_of::<TimeVal>(), 
+    unsafe{ core::slice::from_raw_parts(&time as *const _ as *const u8, core::mem::size_of::<TimeVal>()) });
+    0
 }
 
 pub fn sys_set_priority(prio: isize) -> isize {
-    // if prio > 1 {
-    //     set_current_priority(prio as usize);
-    //     prio
-    // } else {
-    //     -1
-    // }
-    -1
+    if prio > 1 {
+        current_task().unwrap()
+            .set_task_priority(prio as usize);
+        prio
+    } else {
+        -1
+    }
 }
 
 pub fn sys_mmap(start: usize, len: usize, port: usize) -> i32 {
@@ -101,7 +100,24 @@ pub fn sys_exec(path: *const u8) -> isize {
 }
 
 pub fn sys_spawn(path: *const u8) -> isize {
-    -1
+    let token = current_user_token();
+    let path = translated_str(token, path);
+    if let Some(data) = get_app_data_by_name(path.as_str()) {
+        let task = current_task().unwrap();
+        let new_task = task.spawn(data);
+        
+        let new_pid = new_task.pid.0;
+        // modify trap context of new_task, because it returns immediately after switching
+        let trap_cx = new_task.acquire_inner_lock().get_trap_cx();
+        // we do not have to move to next instruction since we have done it before
+        // for child process, fork returns 0
+        trap_cx.x[10] = 0;
+        // add new task to scheduler
+        add_task(new_task);
+        new_pid as isize
+    } else {
+        -1
+    }
 }
 
 /// If there is not a child process whose pid is same as given, return -1.

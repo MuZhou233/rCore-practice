@@ -6,12 +6,14 @@ use super::{PidHandle, pid_alloc, KernelStack};
 use alloc::sync::{Weak, Arc};
 use alloc::vec::Vec;
 use core::ops::Range;
-use spin::{Mutex, MutexGuard};
+use spin::{Mutex, MutexGuard, RwLock};
 
 pub struct TaskControlBlock {
     // immutable
     pub pid: PidHandle,
     pub kernel_stack: KernelStack,
+    task_priority: RwLock<usize>,
+    task_stride: RwLock<usize>,
     // mutable
     inner: Mutex<TaskControlBlockInner>,
 }
@@ -21,7 +23,6 @@ pub struct TaskControlBlockInner {
     pub base_size: usize,
     pub task_cx_ptr: usize,
     pub task_status: TaskStatus,
-    pub task_priority: usize,
     pub memory_set: MemorySet,
     pub parent: Option<Weak<TaskControlBlock>>,
     pub children: Vec<Arc<TaskControlBlock>>,
@@ -88,12 +89,13 @@ impl TaskControlBlock {
         let task_control_block = Self {
             pid: pid_handle,
             kernel_stack,
+            task_priority: RwLock::new(APP_DEFAULT_PRIORITY),
+            task_stride: RwLock::new(0),
             inner: Mutex::new(TaskControlBlockInner {
                 trap_cx_ppn,
                 base_size: user_sp,
                 task_cx_ptr: task_cx_ptr as usize,
                 task_status: TaskStatus::Ready,
-                task_priority: APP_DEFAULT_PRIORITY,
                 memory_set,
                 parent: None,
                 children: Vec::new(),
@@ -156,12 +158,13 @@ impl TaskControlBlock {
         let task_control_block = Arc::new(TaskControlBlock {
             pid: pid_handle,
             kernel_stack,
+            task_priority: RwLock::new(APP_DEFAULT_PRIORITY),
+            task_stride: RwLock::new(0),
             inner: Mutex::new(TaskControlBlockInner {
                 trap_cx_ppn,
                 base_size: parent_inner.base_size,
                 task_cx_ptr: task_cx_ptr as usize,
                 task_status: TaskStatus::Ready,
-                task_priority: APP_DEFAULT_PRIORITY,
                 memory_set,
                 parent: Some(Arc::downgrade(self)),
                 children: Vec::new(),
@@ -179,10 +182,89 @@ impl TaskControlBlock {
         task_control_block
         // ---- release parent PCB lock
     }
+    pub fn spawn(self: &Arc<TaskControlBlock>, elf_data: &[u8]) -> Arc<TaskControlBlock> {
+        // memory_set with elf program headers/trampoline/trap context/user stack
+        let (memory_set, user_sp, entry_point) = MemorySet::from_elf(elf_data);
+        let trap_cx_ppn = memory_set
+            .translate(VirtAddr::from(TRAP_CONTEXT).into())
+            .unwrap()
+            .ppn();
+        // alloc a pid and a kernel stack in kernel space
+        let pid_handle = pid_alloc();
+        let kernel_stack = KernelStack::new(&pid_handle);
+        let kernel_stack_top = kernel_stack.get_top();
+        // ---- hold parent PCB lock
+        let mut parent_inner = self.acquire_inner_lock();
+        // push a goto_trap_return task_cx on the top of kernel stack
+        let task_cx_ptr = kernel_stack.push_on_top(TaskContext::goto_trap_return());
+        let task_control_block = Arc::new(TaskControlBlock {
+            pid: pid_handle,
+            kernel_stack,
+            task_priority: RwLock::new(APP_DEFAULT_PRIORITY),
+            task_stride: RwLock::new(0),
+            inner: Mutex::new(TaskControlBlockInner {
+                trap_cx_ppn,
+                base_size: parent_inner.base_size,
+                task_cx_ptr: task_cx_ptr as usize,
+                task_status: TaskStatus::Ready,
+                memory_set,
+                parent: Some(Arc::downgrade(self)),
+                children: Vec::new(),
+                exit_code: 0,
+            }),
+        });
+        // add child
+        parent_inner.children.push(task_control_block.clone());
+        // modify kernel_sp in trap_cx
+        // **** acquire child PCB lock
+        let trap_cx = task_control_block.acquire_inner_lock().get_trap_cx();
+        // **** release child PCB lock
+        *trap_cx = TrapContext::app_init_context(
+            entry_point,
+            user_sp,
+            KERNEL_SPACE.lock().token(),
+            kernel_stack_top,
+            trap_handler as usize,
+        );
+        // return
+        task_control_block
+        // ---- release parent PCB lock
+    }
     pub fn getpid(&self) -> usize {
         self.pid.0
     }
+    pub fn set_task_priority(&self, prio: usize) {
+        let mut task_priority = self.task_priority.write();
+        *task_priority = prio;
+    }
+    pub fn get_task_priority(&self) -> usize {
+        self.task_priority.read().clone()
+    }
+    pub fn set_task_stride(&self, stride: usize) {
+        let mut task_stride = self.task_stride.write();
+        *task_stride = stride;
+    }
+    pub fn get_task_stride(&self) -> usize {
+        self.task_stride.read().clone()
+    }
 }
+
+impl Ord for TaskControlBlock {
+    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
+        self.get_task_stride().cmp(&other.get_task_stride())
+    }
+}
+impl PartialOrd for TaskControlBlock {
+    fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl PartialEq for TaskControlBlock {
+    fn eq(&self, other: &Self) -> bool {
+        self.get_task_stride() == other.get_task_stride()
+    }
+}
+impl Eq for TaskControlBlock {}
 
 #[derive(Copy, Clone, PartialEq)]
 pub enum TaskStatus {
