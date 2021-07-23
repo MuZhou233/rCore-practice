@@ -1,3 +1,4 @@
+mod mail;
 mod pipe;
 mod stdio;
 
@@ -7,5 +8,6 @@ pub trait File : Send + Sync {
     fn write(&self, buf: UserBuffer) -> usize;
 }
 
+pub use mail::{MailBox, update_mail_sender, get_mail_sender};
 pub use pipe::{Pipe, make_pipe};
 pub use stdio::{Stdin, Stdout};

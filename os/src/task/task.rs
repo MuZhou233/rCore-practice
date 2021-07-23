@@ -8,7 +8,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 use core::ops::Range;
 use spin::{Mutex, MutexGuard, RwLock};
-use crate::fs::{File, Stdin, Stdout};
+use crate::fs::{File, MailBox, Stdin, Stdout, update_mail_sender};
 
 pub struct TaskControlBlock {
     // immutable
@@ -30,6 +30,7 @@ pub struct TaskControlBlockInner {
     pub children: Vec<Arc<TaskControlBlock>>,
     pub exit_code: i32,
     pub fd_table: Vec<Option<Arc<dyn File + Send + Sync>>>,
+    pub mail_box: MailBox,
 }
 
 impl TaskControlBlockInner {
@@ -98,6 +99,8 @@ impl TaskControlBlock {
         let kernel_stack_top = kernel_stack.get_top();
         // push a task context which goes to trap_return to the top of kernel stack
         let task_cx_ptr = kernel_stack.push_on_top(TaskContext::goto_trap_return());
+        let (mail_sender, mail_reciver) = MailBox::new();
+        update_mail_sender(pid_handle.0.clone(), mail_sender);
         let task_control_block = Self {
             pid: pid_handle,
             kernel_stack,
@@ -120,6 +123,7 @@ impl TaskControlBlock {
                     // 2 -> stderr
                     Some(Arc::new(Stdout)),
                 ],
+                mail_box: mail_reciver,
             }),
         };
         // prepare TrapContext in user space
@@ -184,6 +188,8 @@ impl TaskControlBlock {
                 new_fd_table.push(None);
             }
         }
+        let (mail_sender, mail_reciver) = MailBox::from_existed(&parent_inner.mail_box);
+        update_mail_sender(pid_handle.0.clone(), mail_sender);
         let task_control_block = Arc::new(TaskControlBlock {
             pid: pid_handle,
             kernel_stack,
@@ -199,6 +205,7 @@ impl TaskControlBlock {
                 children: Vec::new(),
                 exit_code: 0,
                 fd_table: new_fd_table,
+                mail_box: mail_reciver,
             }),
         });
         // add child
@@ -236,6 +243,8 @@ impl TaskControlBlock {
                 new_fd_table.push(None);
             }
         }
+        let (mail_sender, mail_reciver) = MailBox::new();
+        update_mail_sender(pid_handle.0.clone(), mail_sender);
         let task_control_block = Arc::new(TaskControlBlock {
             pid: pid_handle,
             kernel_stack,
@@ -251,6 +260,7 @@ impl TaskControlBlock {
                 children: Vec::new(),
                 exit_code: 0,
                 fd_table: new_fd_table,
+                mail_box: mail_reciver,
             }),
         });
         // add child
