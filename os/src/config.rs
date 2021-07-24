@@ -11,3 +11,7 @@ pub const PAGE_SIZE_BITS: usize = 0xc;
 
 pub const TRAMPOLINE: usize = usize::MAX - PAGE_SIZE + 1;
 pub const TRAP_CONTEXT: usize = TRAMPOLINE - PAGE_SIZE;
+
+pub const MMIO: &[(usize, usize)] = &[
+    (0x10001000, 0x1000),
+];

@@ -19,10 +19,10 @@ impl MailBox {
             MailBox{role: MailerRole::Reciver, inner}
         )
     }
-    pub fn is_full(&self) -> bool {
+    fn is_full(&self) -> bool {
         self.inner.lock().status == MailBoxStatus::FULL
     }
-    pub fn is_empty(&self) -> bool {
+    fn is_empty(&self) -> bool {
         self.inner.lock().status == MailBoxStatus::EMPTY
     }
     fn clone_inner(&self) -> MailBoxInner {
@@ -138,10 +138,11 @@ impl Clone for MailBoxInner {
 }
 
 impl File for MailBox {
+    fn readable(&self) -> bool { !self.is_empty() }
+    fn writable(&self) -> bool { !self.is_full() }
+
     fn read(&self, buf: UserBuffer) -> usize {
-        if self.is_empty() {
-            return 0
-        }
+        assert_eq!(self.readable(), true);
         let mut buf_iter = buf.into_iter();
         let mut read_size = 0usize;
 
@@ -161,9 +162,7 @@ impl File for MailBox {
         }
     }
     fn write(&self, buf: UserBuffer) -> usize {
-        if self.is_full() {
-            return 0
-        }
+        assert_eq!(self.writable(), true);
         let mut buf_iter = buf.into_iter();
         let mail_content = {
             let mut mail_content = MailContent::new();

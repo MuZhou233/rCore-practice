@@ -16,7 +16,7 @@ mod logging;
 mod sbi;
 mod syscall;
 mod trap;
-mod loader;
+mod drivers;
 mod config;
 mod task;
 mod timer;
@@ -26,7 +26,6 @@ mod fs;
 use log::info;
 
 global_asm!(include_str!("entry.asm"));
-global_asm!(include_str!("link_app.S"));
 
 #[no_mangle]
 pub fn rust_main() -> ! {
@@ -35,12 +34,11 @@ pub fn rust_main() -> ! {
     info!("Hello, world!");
     mm::init();
     mm::remap_test();
-    task::add_initproc();
-    info!("after initproc!");
     trap::init();
     trap::enable_timer_interrupt();
     timer::set_next_trigger();
-    loader::list_apps();
+    fs::list_apps();
+    task::add_initproc();
     task::run_tasks();
     panic!("Unreachable in rust_main!");
 }
