@@ -90,6 +90,25 @@ impl Inode {
         })
     }
 
+    pub fn find_link_num(&self, inode: &Inode) -> usize {
+        let inode_id = self.fs.lock().get_inode_id(&(inode.block_id as u32), &inode.block_offset);
+        self.read_disk_inode(|disk_inode| {
+            let file_count = (disk_inode.size as usize) / DIRENT_SZ;
+            let mut dirent = DirEntry::empty();
+            (0..file_count).filter(|i| {
+                assert_eq!(
+                    disk_inode.read_at(
+                        DIRENT_SZ * i,
+                        dirent.as_bytes_mut(),
+                        &self.block_device,
+                    ),
+                    DIRENT_SZ,
+                );
+                dirent.inode_number() == inode_id
+            }).count()
+        })
+    }
+
     fn increase_size(
         &self,
         new_size: u32,
@@ -153,6 +172,61 @@ impl Inode {
             self.block_device.clone(),
         )))
         // release efs lock automatically by compiler
+    }
+
+    pub fn linkat(&self, old_name: &str, new_name: &str) -> Option<Arc<Inode>> {
+        if let Some(inode) = self.find(old_name) {
+            let mut fs = self.fs.lock();
+            
+            let inode_id = fs.get_inode_id(&(inode.block_id as u32), &inode.block_offset);
+            self.modify_disk_inode(|root_inode| {
+                // append file in the dirent
+                let file_count = (root_inode.size as usize) / DIRENT_SZ;
+                let new_size = (file_count + 1) * DIRENT_SZ;
+                // increase size
+                self.increase_size(new_size as u32, root_inode, &mut fs);
+                // write dirent
+                let dirent = DirEntry::new(new_name, inode_id);
+                root_inode.write_at(
+                    file_count * DIRENT_SZ,
+                    dirent.as_bytes(),
+                    &self.block_device,
+                );
+            });
+            drop(fs);
+
+            self.find(new_name)
+        } else {
+            None
+        }
+    }
+
+    pub fn unlinkat(&self, name: &str) {
+        let _fs = self.fs.lock();
+        if let Some(count) = self.read_disk_inode(|disk_inode| {
+            let file_count = (disk_inode.size as usize) / DIRENT_SZ;
+            (0..file_count).find(|i| {
+                let mut dirent = DirEntry::empty();
+                assert_eq!(
+                    disk_inode.read_at(
+                        i * DIRENT_SZ,
+                        dirent.as_bytes_mut(),
+                        &self.block_device,
+                    ),
+                    DIRENT_SZ,
+                );
+                dirent.name() == name
+            })
+        }) {
+            self.modify_disk_inode(|root_inode| {
+                let dirent = DirEntry::new("", 0);
+                root_inode.write_at(
+                    count * DIRENT_SZ,
+                    dirent.as_bytes(),
+                    &self.block_device,
+                );
+            })
+        }
     }
 
     pub fn ls(&self) -> Vec<String> {

@@ -1,3 +1,5 @@
+use core::any::Any;
+
 use super::File;
 use lazy_static::*;
 use alloc::{collections::VecDeque, sync::Arc, vec::Vec};
@@ -138,6 +140,7 @@ impl Clone for MailBoxInner {
 }
 
 impl File for MailBox {
+    fn as_any(&self) -> &dyn Any { self }
     fn readable(&self) -> bool { !self.is_empty() }
     fn writable(&self) -> bool { !self.is_full() }
 

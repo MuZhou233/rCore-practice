@@ -46,10 +46,15 @@ fn easy_fs_pack() -> std::io::Result<()> {
             .takes_value(true)
             .help("Executable target dir(with backslash)")    
         )
+        .arg(Arg::with_name("ext")
+            .long("ext")
+            .takes_value(true)    
+        )
         .get_matches();
     let src_path = matches.value_of("source").unwrap();
     let target_path = matches.value_of("target").unwrap();
-    println!("src_path = {}\ntarget_path = {}", src_path, target_path);
+    let file_ext = matches.value_of("ext").unwrap_or("");
+    println!("src_path = {}\ntarget_path = {}\nfile_ext = {}", src_path, target_path, file_ext);
     let block_file = Arc::new(BlockFile(Mutex::new({
         let f = OpenOptions::new()
             .read(true)
@@ -77,7 +82,7 @@ fn easy_fs_pack() -> std::io::Result<()> {
         .collect();
     for app in apps {
         // load app data from host file system
-        let mut host_file = File::open(format!("{}{}", target_path, app)).unwrap();
+        let mut host_file = File::open(format!("{}{}{}", target_path, app, file_ext)).unwrap();
         let mut all_data: Vec<u8> = Vec::new();
         host_file.read_to_end(&mut all_data).unwrap();
         // create a file in easy-fs

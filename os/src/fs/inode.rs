@@ -1,8 +1,8 @@
+use core::any::Any;
 use easy_fs::{
     EasyFileSystem,
     Inode,
 };
-use log::debug;
 use crate::drivers::BLOCK_DEVICE;
 use alloc::sync::Arc;
 use lazy_static::*;
@@ -130,7 +130,28 @@ pub fn open_file(name: &str, flags: OpenFlags) -> Option<Arc<OSInode>> {
     }
 }
 
+pub fn linknum(inode: &OSInode) -> usize {
+    ROOT_INODE.find_link_num(&inode.inner.lock().inode)
+}
+
+pub fn linkat(old_name: &str, new_name: &str) -> Option<Arc<OSInode>> {
+    if let Some(inode) = ROOT_INODE.linkat(old_name, new_name) {
+        Some(Arc::new(OSInode::new(
+            true,
+            true,
+            inode
+        )))
+    } else {
+        None
+    }
+}
+
+pub fn unlinkat(name: &str) {
+    ROOT_INODE.unlinkat(name)
+}
+
 impl File for OSInode {
+    fn as_any(&self) -> &dyn Any { self }
     fn readable(&self) -> bool { self.readable }
     fn writable(&self) -> bool { self.writable }
     fn read(&self, mut buf: UserBuffer) -> usize {

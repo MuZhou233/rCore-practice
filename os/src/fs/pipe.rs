@@ -1,3 +1,5 @@
+use core::any::Any;
+
 use super::File;
 use alloc::sync::{Arc, Weak};
 use spin::Mutex;
@@ -113,6 +115,7 @@ pub fn make_pipe() -> (Arc<Pipe>, Arc<Pipe>) {
 }
 
 impl File for Pipe {
+    fn as_any(&self) -> &dyn Any { self }
     fn readable(&self) -> bool { self.readable }
     fn writable(&self) -> bool { self.writable }
     fn read(&self, buf: UserBuffer) -> usize {

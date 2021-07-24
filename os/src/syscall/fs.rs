@@ -1,12 +1,8 @@
-use crate::mm::{
-    UserBuffer,
-    translated_byte_buffer,
-    translated_refmut,
-    translated_str,
-};
+use crate::mm::{UserBuffer, translated_byte_buffer, translated_refmut, translated_str, write_translated_byte_buffer};
 use crate::task::{current_user_token, current_task};
-use crate::fs::{File, OpenFlags, get_mail_sender, make_pipe, open_file};
+use crate::fs::{File, OSInode, OpenFlags, get_mail_sender, linkat, linknum, list_apps, make_pipe, open_file, unlinkat};
 use alloc::sync::Arc;
+use log::trace;
 
 pub fn sys_write(fd: usize, buf: *const u8, len: usize) -> isize {
     let token = current_user_token();
@@ -60,7 +56,7 @@ pub fn sys_read(fd: usize, buf: *const u8, len: usize) -> isize {
     }
 }
 
-pub fn sys_open(path: *const u8, flags: u32) -> isize {
+pub fn sys_open(_dirfd: usize, path: *const u8, flags: u32, _mode: u32) -> isize {
     let task = current_task().unwrap();
     let token = current_user_token();
     let path = translated_str(token, path);
@@ -88,6 +84,69 @@ pub fn sys_close(fd: usize) -> isize {
     }
     inner.fd_table[fd].take();
     0
+}
+
+pub fn sys_linkat(_olddirfd: i32, oldpath: *const u8, _newdirfd: i32, newpath: *const u8, _flags: u32) -> isize {
+    let token = current_user_token();
+    let oldpath = translated_str(token, oldpath);
+    let newpath = translated_str(token, newpath);
+    if let Some(_) = linkat(&oldpath, &newpath) {
+        0
+    } else {
+        -1
+    }
+}
+
+pub fn sys_unlinkat(_dirfd: i32, path: *const u8, _flags: u32) -> isize {
+    let token = current_user_token();
+    let path = translated_str(token, path);
+    unlinkat(&path);
+    0
+}
+
+#[repr(C)]
+#[derive(Debug)]
+pub struct Stat {
+    /// 文件所在磁盘驱动器号
+    pub dev: u64,
+    /// inode 文件所在 inode 编号
+    pub ino: u64,
+    /// 文件类型
+    pub mode: StatMode,
+    /// 硬链接数量，初始为1
+    pub nlink: u32,
+    /// 无需考虑，为了兼容性设计
+    pad: [u64; 7],
+}
+bitflags! {
+    pub struct StatMode: u32 {
+        const NULL  = 0;
+        /// directory
+        const DIR   = 0o040000;
+        /// ordinary regular file
+        const FILE  = 0o100000;
+    }
+}
+pub fn sys_fstat(fd: i32, st: *const u8) -> isize {
+    let task = current_task().unwrap();
+    let token = current_user_token();
+    let inner = task.acquire_inner_lock();
+    if let Some(file) = &inner.fd_table[fd as usize] {
+        if let Some(file) = file.as_any().downcast_ref::<OSInode>() {
+            let stat = Stat{
+                dev: 0,
+                ino: 0,
+                mode: StatMode::FILE,
+                nlink: linknum(&file) as u32,
+                pad: [0u64; 7]
+            };
+            write_translated_byte_buffer(token, st, core::mem::size_of::<Stat>(), 
+            unsafe{ core::slice::from_raw_parts(&stat as *const _ as *const u8, core::mem::size_of::<Stat>()) });
+            return 0;
+        }
+    }
+
+    -1
 }
 
 pub fn sys_pipe(pipe: *mut usize) -> isize {

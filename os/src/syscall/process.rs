@@ -125,14 +125,14 @@ pub fn sys_spawn(path: *const u8, mut args: *const usize) -> isize {
     let token = current_user_token();
     let path = translated_str(token, path);
     let mut args_vec: Vec<String> = Vec::new();
-    loop {
-        let arg_str_ptr = *translated_ref(token, args);
-        if arg_str_ptr == 0 {
-            break;
-        }
-        args_vec.push(translated_str(token, arg_str_ptr as *const u8));
-        unsafe { args = args.add(1); }
-    }
+    // loop {
+    //     let arg_str_ptr = *translated_ref(token, args);
+    //     if arg_str_ptr == 0 {
+    //         break;
+    //     }
+    //     args_vec.push(translated_str(token, arg_str_ptr as *const u8));
+    //     unsafe { args = args.add(1); }
+    // }
     if let Some(app_inode) = open_file(path.as_str(), OpenFlags::RDONLY) {
         let all_data = app_inode.read_all();
         let task = current_task().unwrap();

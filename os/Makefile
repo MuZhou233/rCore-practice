@@ -3,7 +3,6 @@ TARGET := riscv64gc-unknown-none-elf
 MODE := release
 KERNEL_ELF := target/$(TARGET)/$(MODE)/os
 KERNEL_BIN := $(KERNEL_ELF).bin
-FS_IMG := ../user/target/$(TARGET)/$(MODE)/fs.img
 APPS := ../user/src/bin/*
 
 # BOARD
@@ -20,16 +19,17 @@ KERNEL_ENTRY_PA := 0x80200000
 # KERNEL OPTIONS
 LOG ?= 
 
-SOURCE_PATH := ../user/src/bin/
-TARGET_PATH := ../user/target/riscv64gc-unknown-none-elf/release/
 # TEST OPTIONS
 ifdef CHAPTER
-SOURCE_PATH := ../tests/user/build/elf/
+FS_IMG := ../tests/user/build/elf/fs.img
+SOURCE_PATH := ../tests/user/build/bin/
 TARGET_PATH := ../tests/user/build/elf/
-export WATCH_PATH=../tests/user/build/
-export SOURCE_PATH=$(SOURCE_PATH)
-export TARGET_PATH=$(TARGET_PATH)
-export FILE_EXT=.elf
+FILE_EXT := --ext .elf
+else
+FS_IMG := ../user/target/$(TARGET)/$(MODE)/fs.img
+SOURCE_PATH := ../user/src/bin/
+TARGET_PATH := ../user/target/$(TARGET)/$(MODE)/
+FILE_EXT :=
 endif
 
 build:
@@ -41,8 +41,8 @@ clean:
 	@cd ../user && make clean
 	@cd ../tests/user && make clean
 
-$(FS_IMG): $(APPS)
-	@cd ../easy-fs-fuse && cargo run --release -- -s $(SOURCE_PATH) -t $(TARGET_PATH)
+$(FS_IMG):
+	@cd ../easy-fs-fuse && cargo run --release -- -s $(SOURCE_PATH) -t $(TARGET_PATH) $(FILE_EXT)
 
 run: build gen-user $(FS_IMG) qemu
 
